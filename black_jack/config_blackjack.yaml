@@ -1,0 +1,12 @@
+chip_pool: 100
+bet: 1
+
+# Blackjack payoff
+bj_po: 1.5
+
+# Number of players & player position
+num_players: 5
+user_position: 3
+
+# Number of decks
+num_deck: 6
