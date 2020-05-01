@@ -154,9 +154,14 @@ class Blackjack:
         make decisions on hand
         """
         while hand.playing and not hand.bust and not hand.black_jack:
-            if user:
+            if user and self.user_input:
                 print('User Card: ' + hand.get_hand_info())
                 inp = input('Enter decision (H / St / D / Sp): ')
+                hand.decision = inp
+
+            elif user and not self.user_input:
+                f = 's.Strategy(self.dealer_h, hand).' + self.user_strategy + '()'
+                inp = eval(f)
                 hand.decision = inp
 
             else:
@@ -193,14 +198,29 @@ class Blackjack:
                 # stop dealing
                 self.dealer_h.playing = False
 
+    def __flatten_list(self, l: list):
+
+        if type(l) != list:
+            l = [l]
+
+        result = []
+        for i in l:
+            if type(i) is list:
+                result = result + self.__flatten_list(i)
+            else:
+                result = result + [i]
+        return result
+
     def __fill_payoff(self):
         """
         fill in payoff and update pool
         """
         for i in range(1, self.num_players + 1):
             # go through each player and check if busted
-            if type(self.players_h[i]) == list:
-                for j in self.players_h[i]:
+            if type(self.players_h[i]) is list:
+                l = self.__flatten_list(self.players_h[i])
+
+                for j in l:
                     self.__calc_payoff(j)
             else:
                 self.__calc_payoff(self.players_h[i])
@@ -212,7 +232,8 @@ class Blackjack:
         for i in range(1, self.num_players + 1):
             # go through each player and check if busted
             if type(self.players_h[i]) == list:
-                for j in self.players_h[i]:
+                l = self.__flatten_list(self.players_h[i])
+                for j in l:
                     if not j.bust:
                         return False
             else:
@@ -224,23 +245,37 @@ class Blackjack:
         """
         keeps track of game information
         """
-        if self.user_h is list:
-            p_1st = self.user_h[0].hand[0].draw()
-            p_2nd = self.user_h[1].hand[0].draw()
+        if type(self.user_h) is list:
+            h1 = self.__flatten_list(self.user_h[0])[0]
+            h2 = self.__flatten_list(self.user_h[1])[0]
+
+            p_1st = h1.hand[0].draw()
+            p_2nd = h2.hand[0].draw()
             decision = 'Sp'
-            bet = self.user_h[0].bet + self.user_h[1].bet
+            # todo: flatten the list and get sum of all the bets
+            bet = 0
+            h_value = 0
 
         else:
             p_1st = self.user_h.hand[0].draw()
             p_2nd = self.user_h.hand[1].draw()
             decision = self.user_h.decision
             bet = self.user_h.bet
+            if self.user_h.bust:
+                h_value = 0
+            else:
+                h_value = self.user_h.hand_value[0]
 
         d_1st = self.dealer_h.hand[0].draw()
         d_2nd = self.dealer_h.hand[1].draw()
 
+        if self.dealer_h.bust:
+            d_value = 0
+        else:
+            d_value = self.dealer_h.hand_value[0]
+
         info = {'Player 1st Card': [p_1st], 'Player 2nd Card': [p_2nd], 'Player Decision': [decision], 'Bet': [bet],
-                'Dealer 1st Card': [d_1st], 'Dealer 2nd Card': [d_2nd], 'Pool': [self.pool], 'Count': [self.count_user]}
+                'Dealer 1st Card': [d_1st], 'Dealer 2nd Card': [d_2nd], 'Pool': [self.pool], 'Count': [self.count_user], 'Dealer Value': [d_value], 'Player Value': [h_value]}
         df = pd.DataFrame(info)
         self.game_info_df = pd.concat([self.game_info_df, df])
 
@@ -248,21 +283,26 @@ class Blackjack:
         """
         calculate payout ratio
         """
-        # bust
-        if self.user_h.bust:
+
+        # player bust
+        if hand.bust:
             hand.payoff_ratio = -1
 
-        # blackjack
-        elif self.user_h.black_jack:
+        # player blackjack
+        elif hand.black_jack:
             hand.payoff_ratio = self.bj_po
 
-        # dealer
+        # dealer bust
         elif self.dealer_h.bust:
             hand.payoff_ratio = 1
 
-        # lose
-        elif self.user_h.hand_value[0] < self.dealer_h.hand_value[0]:
+        # player lose
+        elif hand.hand_value[0] < self.dealer_h.hand_value[0]:
             hand.payoff_ratio = -1
+
+        # player win
+        elif hand.hand_value[0] > self.dealer_h.hand_value[0]:
+            hand.payoff_ratio = 1
 
         # push
         else:
@@ -270,12 +310,13 @@ class Blackjack:
 
     def __update_pool(self):
         if type(self.user_h) == list:
-            self.pool = self.pool + self.user_h[0].bet * self.user_h[0].payoff_ratio + \
-                        self.user_h[1].bet * self.user_h[1].payoff_ratio
+            l = self.__flatten_list(self.user_h)
+            for h in l:
+                self.pool = self.pool + h.bet * h.payoff_ratio
         else:
             self.pool = self.pool + self.user_h.bet * self.user_h.payoff_ratio
 
-    def __play_blackjack(self, bet=5):
+    def play_blackjack(self, bet=5):
 
         # initiate hands
         self.__initiate_hands(bet)
@@ -316,7 +357,7 @@ class Blackjack:
         inp = input("Enter bet amount or Q to quit: ")
 
         while inp != 'Q':
-            self.__play_blackjack(int(inp))
+            self.play_blackjack(int(inp))
             inp = input("Enter bet amount or Q to quit: ")
         print('Thank you for playing')
         print(self.game_info_df)
